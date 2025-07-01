@@ -1,0 +1,91 @@
+/*
+=============================================================================================================================
+> this Script insert the data into tables in "bronze" database, extracts the data from source csv files.
+> runcatess the table in bronze database before loading the data.
+> I have use 'LOAD DATA INFILE' to insert bulk data into the tabless.
+=============================================================================================================================
+*/
+
+
+TRUNCATE TABLE crm_cust_info;
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/sql-data-warehouse-project/datasets/source_crm/cust_info.csv'
+INTO TABLE crm_cust_info
+FIELDS TERMINATED BY ","
+ENCLOSED BY '"'
+LINES TERMINATED BY '\r\n'
+IGNORE 1 LINES
+(@cst_id, @cst_key, @cst_firstname, @cst_lastname, @cst_marital_status, @cst_gender, @cst_create_date)
+SET 
+  cst_id = NULLIF(@cst_id, ''),
+  cst_key = @cst_key,
+  cst_firstname = @cst_firstname,
+  cst_lastname = @cst_lastname,
+  cst_marital_status = @cst_marital_status,
+  cst_gender = @cst_gender,
+  cst_create_date = STR_TO_DATE(NULLIF(@cst_create_date,''), '%Y-%m-%d');  -- tweak if your date format 
+  
+  TRUNCATE TABLE crm_prd_info;
+  LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/sql-data-warehouse-project/datasets/source_crm/prd_info.csv'
+  INTO TABLE crm_prd_info
+  FIELDS TERMINATED BY ","
+  ENCLOSED BY '"'
+  LINES TERMINATED BY '\r\n'
+  IGNORE 1 LINES
+  (@prd_id,@prd_key,@prd_nm,@prd_cost,@prd_line,@prd_start_dt,@prd_end_dt)
+  SET
+  prd_id = @prd_id,
+  prd_key = @prd_key,
+  prd_nm = @prd_nm,
+  prd_cost = NULLIF(@prd_cost, ''),
+  prd_line = @prd_line,
+  prd_start_dt = str_to_date(NULLIF(@prd_start_dt,''), '%Y-%m-%d'),
+  prd_end_dt = str_to_date(NULLIF(@prd_end_dt,''),'%Y-%m-%d');
+  
+  TRUNCATE TABLE crm_sales_details;
+  LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/sql-data-warehouse-project/datasets/source_crm/sales_details.csv'
+  INTO TABLE crm_sales_details
+  FIELDS TERMINATED BY ","
+  ENCLOSED BY '"'
+  LINES TERMINATED BY '\r\n'
+  IGNORE 1 LINES
+  (@sls_ord_num,@sls_prd_key,@sls_cust_id,@sls_order_dt,@sls_ship_dt,@sls_due_dt,@sls_sales,@sls_quantity,@sls_price)
+  SET
+  sls_ord_num = @sls_ord_num,
+  sls_prd_key = @sls_prd_key,
+  sls_cust_id = @sls_cust_id,
+  sls_order_dt = str_to_date(NULLIF(NULLIF(NULLIF(NULLIF(@sls_order_dt,''),'0'),'32154'),'5489'),'%Y%m%d'),
+  sls_ship_dt = str_to_date(NULLIF(NULLIF(@sls_ship_dt,''),'0'),'%Y%m%d'),
+  sls_due_dt = str_to_date(NULLIF(NULLIF(@sls_due_dt,''),'0'),'%Y%m%d'),
+  sls_sales = NULLIF(@sls_sales, ''),
+  sls_quantity = @sls_quantity,
+  sls_price = NULLIF(@sls_price, '');  
+  
+  TRUNCATE TABLE erp_cust_az12;
+  LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/sql-data-warehouse-project/datasets/source_erp/CUST_AZ12.CSV'
+  INTO TABLE erp_cust_az12
+  FIELDS TERMINATED BY ","
+  ENCLOSED BY '"'
+  LINES TERMINATED BY '\r\n'
+  IGNORE 1 LINES
+  (@CID,@BDATE,@GEN)
+  SET
+  CID = NULLIF(@CID,''),
+  BDATE = NULLIF(@BDATE,''),
+  GEN = NULLIF(@GEN,'');
+  
+  TRUNCATE TABLE erp_loc_a101;
+  LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/sql-data-warehouse-project/datasets/source_erp/LOC_A101.CSV'
+  INTO TABLE erp_loc_a101
+  FIELDS TERMINATED BY ","
+  ENCLOSED BY '"'
+  LINES TERMINATED BY '\r\n'
+  IGNORE 1 LINES;
+  
+  TRUNCATE TABLE erp_px_cat_g1v2;
+  LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/sql-data-warehouse-project/datasets/source_erp/px_cat_g1v2.CSV'
+  INTO TABLE erp_px_cat_g1v2
+  FIELDS TERMINATED BY ","
+  ENCLOSED BY '"'
+  LINES TERMINATED BY '\r\n'
+  IGNORE 1 LINES;
+  
