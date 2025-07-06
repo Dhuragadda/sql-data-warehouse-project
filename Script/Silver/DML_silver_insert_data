@@ -1,1 +1,168 @@
+*/
+Script :- loading the data from Bronze --------> to Silver database
+=========================================================================================================================
+Purpose :- This stored procedure is for forming ETL (Extracting, Transforming, Loading) operation from Bronze database 
+table to Silver database.
 
+Action:- Truncates table in Silver database
+          Inserts transformed and cleaned data into silver from Bronze database. 
+
+parameter :- This stored procedure dont accpets any parameter or returns any value
+/*
+
+
+DROP PROCEDURE IF EXISTS datawarehouse_silver.Load_silver;
+DELIMITER $$
+CREATE PROCEDURE datawarehouse_silver.Load_silver()
+BEGIN
+		TRUNCATE TABLE datawarehouse_silver.crm_cust_info;
+		INSERT INTO datawarehouse_silver.crm_cust_info(
+		cst_id,
+		cst_key,
+		cst_firstname,
+		cst_lastname,
+		cst_marital_status,
+		cst_gender,
+		cst_create_date
+		)
+		SELECT 
+			cst_id ,
+			cst_key , 
+			TRIM(cst_firstname) AS cst_firstname , 
+			TRIM(cst_lastname) AS cst_lastname ,
+			CASE 
+				WHEN UPPER(TRIM(cst_marital_status)) = 'S' THEN 'Single'
+				WHEN UPPER(TRIM(cst_marital_status)) = 'M' THEN 'Married'
+				ELSE 'n/a'
+				end as cst_marital_status,
+			CASE
+				WHEN upper(TRIM(cst_gender)) = 'M' THEN 'Male'
+				WHEN upper(TRIM(cst_gender)) = 'F' THEN  'Female'
+				ELSE 'n/a'
+				END AS cst_gender,
+			cst_create_date
+		 FROM (
+				SELECT  *,
+				ROW_NUMBER() OVER(PARTITION BY cst_id ORDER BY cst_create_date DESC) AS last_flag
+				from datawarehouse_bronze.crm_cust_info
+				WHERE cst_id IS NOT NULL) AS rnk_tb
+		WHERE last_flag =1;
+		-- =================================================================================================
+		-- data validations
+		-- data cleaning for prd_into silver_db
+		-- =================================================================================================
+
+		TRUNCATE TABLE datawarehouse_silver.crm_prd_info;
+		insert INTO datawarehouse_silver.crm_prd_info(
+		prd_id,
+		prd_cat_id,
+		prd_key,
+		prd_nm,
+		prd_cost,
+		prd_line,
+		prd_start_dt,
+		prd_end_dt
+		)
+		SELECT 
+		prd_id,
+		replace(substring(prd_key,1,5),'-','_') as prd_cat_id,
+		substring(prd_key,7,length(prd_key))  as prd_key,
+		prd_nm,
+		ifnull(prd_cost, 0) as prd_cost,
+		case upper(trim(prd_line))
+				when 'R' then 'Road'
+				when 'M' then 'Mountain'
+				when 'S' then 'Other sales'
+				when 'T' then 'Touring'
+				else 'n/a'
+		end as prd_line,
+		prd_start_dt,
+		date_sub(lead(prd_start_dt) over(partition by prd_key order by prd_start_dt ), interval 1 day )as prd_end_dt
+		FROM datawarehouse_bronze.crm_prd_info;
+
+		-- ========================================================================================================================================
+		-- crm_sales_details
+		-- ========================================================================================================================================
+		TRUNCATE TABLE datawarehouse_silver.crm_sales_details;
+		insert into datawarehouse_silver.crm_sales_details(
+				sls_ord_num,
+				sls_prd_key,
+				sls_cust_id,
+				sls_order_dt,
+				sls_ship_dt,
+				sls_due_dt,
+				sls_sales,
+				sls_quantity,
+				sls_price
+		)
+		SELECT 
+		sls_ord_num,
+		sls_prd_key,
+		sls_cust_id,
+		sls_order_dt,
+		sls_ship_dt,
+		sls_due_dt,
+		sls_quantity * ABS(sls_price) as sls_sales,
+		sls_quantity,
+		case 
+			when sls_price is null or sls_price <1 or sls_price != abs(sls_price) then sls_sales/ ifnull(sls_quantity,0) else sls_price end as sls_price
+		frOM datawarehouse_bronze.crm_sales_details;
+
+
+		-- ===============================================================================================================
+		 -- erp_cust_az12
+		-- ===============================================================================================================
+		TRUNCATE TABLE datawarehouse_silver.erp_cust_az12;
+		INSERT INTO datawarehouse_silver.erp_cust_az12(
+		CID,
+		BDATE,
+		GEN
+		)
+		SELECT 
+		CASE 
+			WHEN cid LIKE 'NAS%' THEN SUBSTRING(cid,4,LENGTH(cid)) ELSE cid end as cid,
+		CASE 
+			WHEN BDATE > current_date() THEN NULL ELSE BDATE END AS BDATE,
+		CASE
+			WHEN UPPER(TRIM(GEN)) IN ('M','MALE') THEN 'Male'
+			WHEN UPPER(TRIM(GEN)) IN ('F','FEMALE') THEN 'Female'
+			ELSE 'n/a'
+			end GEN
+		FROM datawarehouse_bronze.erp_cust_az12;
+
+		-- ================================================================================================
+		-- STANDARDIZATION & CONSISTENCY
+		-- ================================================================================================
+		TRUNCATE TABLE datawarehouse_silver.erp_loc_a101;
+		INSERT INTO datawarehouse_silver.erp_loc_a101(
+		CID,
+		CNTRY
+		)
+		SELECT 
+		REPLACE(CID,'-','') AS CID,
+		CASE
+			WHEN TRIM(CNTRY) IN ('US','USA') THEN 'United States'
+			WHEN TRIM(CNTRY) = 'DE' THEN 'Germay'
+			WHEN TRIM(CNTRY) = '' OR CNTRY IS NULL THEN 'N/A'
+			ELSE CNTRY END AS C
+		FROM datawarehouse_bronze.erp_loc_a101;
+
+		-- ========================================================================================================================
+
+		TRUNCATE TABLE datawarehouse_silver.erp_px_cat_g1v2;
+		INSERT INTO datawarehouse_silver.erp_px_cat_g1v2(
+		ID,
+		CAT,
+		SUBCAT,
+		MAINTENANCE
+		)
+		select 
+		ID,
+		CAT,
+		SUBCAT,
+		MAINTENANCE
+		FROM datawarehouse_bronze.erp_px_cat_g1v2;
+END $$
+DELIMITER ;
+
+CALL Load_silver()
